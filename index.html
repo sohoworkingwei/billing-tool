@@ -319,6 +319,22 @@ let manualCount = 0;
 // 【方式一】直接在下一行填入金鑰（內部使用）
 const HARDCODED_KEY = '';  // 例如 'sk-ant-api03-...'
 
+// ── 名稱對照表 ──
+// 格式：'帳單原始名稱（部分符合即可）': '顯示名稱'
+// 比對方式：帳單名稱包含左邊的字串（不分大小寫）就替換成右邊
+const NAME_MAP = {
+  'WAVESPEEDAI': 'WaveSpeedAI',
+  'OPENAI': 'GPT4',
+  'ADOBE': 'Adobe月費',
+  'ELEVENLABS': 'ElevenLabs',
+  'GOOGLE ONE': 'Google One',
+  'YOUTUBE': 'YouTube',
+  'MUREKA': 'Mureka',
+  'FISH AUDIO': 'Fish Audio',
+  'DZINE': 'Dzine',
+  // 在這裡繼續新增對照...
+};
+
 function getApiKey() {
   return HARDCODED_KEY || localStorage.getItem('anthropic_api_key') || '';
 }
@@ -433,12 +449,11 @@ async function runExtract() {
   const billText = document.getElementById('ext-textarea').value.trim();
   const sys = `你是帳單萃取助手。從帳單中找出所有費用項目，以 JSON 陣列回傳，每個元素：
 - name: 服務名稱（英文保留，可附月份，如 GPT4(2026/05)）
-- original_amount: 原始金額字串，如 "$20.00 USD" 或 "NT$1,900"
 - currency: TWD 或 USD
 - amount_orig: 原始數字（浮點數）
 - amount_twd: 台幣金額（整數）；USD × ${rate}，TWD 直接用
+- tax: 稅金（整數，台幣）；若帳單上有稅則填入，否則填 null
 - billing_date: 帳單日期 YYYY.MM.DD，無法確認留空字串
-- note: 方案名稱或備註，無則空字串
 只回傳 JSON 陣列，不含任何其他文字或 markdown。`;
 
   try {
@@ -474,29 +489,40 @@ async function runExtract() {
   btn.disabled = false;
 }
 
+function applyNameMap(name) {
+  const upper = name.toUpperCase();
+  for (const [key, val] of Object.entries(NAME_MAP)) {
+    if (upper.includes(key.toUpperCase())) return val;
+  }
+  return name;
+}
+
 function renderExtResult(items) {
   window._extItems = items;
-  const today = new Date();
-  const dd = `${today.getFullYear()}.${String(today.getMonth()+1).padStart(2,'0')}.${String(today.getDate()).padStart(2,'0')}`;
-  const rows = items.map((item, i) => `
-    <tr>
-      <td><input type="text" id="ei-name-${i}" value="${esc(item.name)}"></td>
-      <td><input type="text" id="ei-date-${i}" value="${esc(item.billing_date || dd)}" style="width:110px"></td>
+  const rate = parseFloat(document.getElementById('ext-rate').value) || 31.5;
+  const rows = items.map((item, i) => {
+    const isUSD = item.currency === 'USD';
+    const note = isUSD ? `${item.amount_orig}×${rate}=${item.amount_twd}` : '';
+    item._mappedName = applyNameMap(item.name);
+    const taxVal = (item.tax != null && item.tax !== 0) ? item.tax : 'x';
+    const mapped = item._mappedName !== item.name;
+    return `<tr>
       <td>
-        <span style="font-size:11px;color:var(--text2)">${esc(item.original_amount || '')}</span><br>
-        <input type="number" id="ei-amt-${i}" value="${item.amount_twd}" style="width:85px;font-weight:600">
-        <span style="font-size:11px;color:var(--text2)">TWD</span>
-        ${item.currency === 'USD' ? '<span class="badge badge-blue" style="margin-left:4px">USD 已換算</span>' : ''}
+        <input type="text" id="ei-name-${i}" value="${esc(item._mappedName)}">
+        ${mapped ? `<div style="font-size:11px;color:var(--text3);margin-top:2px">原始：${esc(item.name)}</div>` : ''}
       </td>
-      <td style="font-size:12px;color:var(--text2)">${esc(item.note || '')}</td>
-    </tr>`).join('');
+      <td><input type="number" id="ei-amt-${i}" value="${item.amount_twd}" style="width:90px;font-weight:600"></td>
+      <td><input type="text" id="ei-tax-${i}" value="${taxVal}" style="width:55px;text-align:center"></td>
+      <td><input type="text" id="ei-note-${i}" value="${esc(note)}" style="font-size:12px"></td>
+    </tr>`;
+  }).join('');
 
   document.getElementById('ext-result').innerHTML = `
     <div style="margin-top:1.25rem">
-      <p style="font-size:13px;font-weight:600;margin-bottom:.875rem">解析出 ${items.length} 筆，可直接修改後匯入對帳頁。</p>
+      <p style="font-size:13px;font-weight:600;margin-bottom:.875rem">解析出 ${items.length} 筆，可直接修改後匯入或複製。</p>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th style="width:28%">服務名稱</th><th style="width:18%">日期</th><th style="width:32%">金額</th><th style="width:22%">備註</th></tr></thead>
+          <thead><tr><th style="width:32%">項目</th><th style="width:18%">營業額（TWD）</th><th style="width:10%">稅</th><th style="width:40%">備註</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -514,14 +540,15 @@ function renderExtResult(items) {
 function getEdited() {
   return (window._extItems || []).map((item, i) => ({
     name: document.getElementById('ei-name-' + i)?.value || item.name,
-    date: document.getElementById('ei-date-' + i)?.value || item.billing_date || '',
     amount: parseFloat(document.getElementById('ei-amt-' + i)?.value) || item.amount_twd || 0,
+    tax: document.getElementById('ei-tax-' + i)?.value || 'x',
+    note: document.getElementById('ei-note-' + i)?.value || '',
     id: Math.random().toString(36).slice(2)
   }));
 }
 function copyTSV() {
   const edited = getEdited();
-  const tsv = '項目\t付款日期\t金額（台幣）\n' + edited.map(r => `${r.name}\t${r.date}\t${r.amount}`).join('\n');
+  const tsv = '項目\t營業額\t稅\t備註\n' + edited.map(r => `${r.name}\t${r.amount}\t${r.tax}\t${r.note}`).join('\n');
   navigator.clipboard.writeText(tsv).catch(() => {});
   document.getElementById('tsv-output').style.display = 'block';
   document.getElementById('tsv-box').textContent = tsv;
