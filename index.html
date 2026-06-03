@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>帳單對帳工具</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <style>
   /* ── 全域 ── */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -414,12 +417,26 @@ function handleExtDrop(e) {
 }
 function handleExtFileInput(e) { [...e.target.files].forEach(processExtFile); }
 function processExtFile(file) {
+  if (extFiles.some(f => f.name === file.name)) {
+    showDupWarning(file.name);
+    return;
+  }
   const reader = new FileReader();
   reader.onload = ev => {
     extFiles.push({ name: file.name, data: ev.target.result.split(',')[1], type: file.type, size: file.size });
     renderExtFiles(); checkExtReady();
   };
   reader.readAsDataURL(file);
+}
+function showDupWarning(name) {
+  const existing = document.getElementById('dup-warning');
+  if (existing) existing.remove();
+  const div = document.createElement('div');
+  div.id = 'dup-warning';
+  div.style.cssText = 'margin-top:.5rem;padding:.5rem .875rem;background:var(--amber-bg);border-radius:var(--radius);font-size:12px;color:var(--amber-text);display:flex;align-items:center;gap:8px';
+  div.innerHTML = `⚠ 「${esc(name)}」已在清單中，略過重複檔案。<button onclick="this.parentElement.remove()" style="margin-left:auto;border:none;background:transparent;cursor:pointer;color:var(--amber-text);font-size:14px">✕</button>`;
+  document.getElementById('ext-files-list').before(div);
+  setTimeout(() => div.remove(), 4000);
 }
 function removeExtFile(i) {
   extFiles.splice(i, 1); renderExtFiles();
