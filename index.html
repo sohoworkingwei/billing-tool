@@ -476,8 +476,8 @@ async function runExtract() {
 
   const billText = document.getElementById('ext-textarea').value.trim();
   const sys = `你是帳單萃取助手。從帳單中找出所有費用項目，以 JSON 陣列回傳，每個元素：
-- name: 服務名稱（英文保留，可附月份及計費區間，如 GPT4(2026/05) 或 MaxPlan(05/05-06/05)）
-- raw_name: 帳單上的完整原始服務名稱，不做任何縮短或省略
+- name: 服務／公司名稱。判斷優先順序：(1) 帳單上的寄件公司名稱、From、網址、logo、品牌名稱，(2) Description 欄位。若 Description 只有方案名稱如 Plus / Pro / Starter / Max plan，必須用公司資訊來判斷真正的服務名稱。可附月份及計費區間，如 Fish Audio(05/21-06/21)
+- raw_name: 帳單 Description 欄位的完整原始文字，不做任何縮短或省略
 - currency: TWD 或 USD
 - amount_orig: 實際付款金額（浮點數）；若帳單有「Amount paid」欄位，以該金額為準，而非 Total 或 Subtotal；若有 Applied balance（餘額抵扣），需計算實際付款金額
 - amount_twd: 台幣金額（整數）；USD × ${rate}，TWD 直接用
