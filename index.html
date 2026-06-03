@@ -351,6 +351,27 @@ const NO_TAX_LIST = [
   // 在這裡繼續新增不含稅的服務...
 ];
 
+// 固定排序清單（對照你的作帳習慣，有對到的照順序，沒對到的放最後）
+const SORT_ORDER = [
+  'Arcweave',
+  'Adobe月費',
+  'GPT4',
+  'YouTube',
+  'Dzine',
+  'ElevenLabs',
+  'Google One',
+  'VoAI 聲音創造所',
+  'Mureka',
+  'Fish Audio',
+  'Kling AI',
+  'WaveSpeedAI',
+  'ShengShu AI',
+  'Claude',
+  '中華電信',
+  '業務補助_馮媛電話費',
+  // 在這裡繼續新增排序...
+];
+
 function getApiKey() {
   return HARDCODED_KEY || localStorage.getItem('anthropic_api_key') || '';
 }
@@ -560,6 +581,21 @@ function applyNameMap(name, rawName) {
 function renderExtResult(items, fileNames, textLabel) {
   window._extItems = items;
   const rate = parseFloat(document.getElementById('ext-rate').value) || 31.5;
+
+  // 先套用名稱對照，再排序
+  items.forEach(item => {
+    item._mappedName = applyNameMap(item.name, item.raw_name);
+  });
+
+  // 按照 SORT_ORDER 排序，找不到的放最後
+  items.sort((a, b) => {
+    const ai = SORT_ORDER.findIndex(s => (a._mappedName || a.name).includes(s) || s.includes(a._mappedName || a.name));
+    const bi = SORT_ORDER.findIndex(s => (b._mappedName || b.name).includes(s) || s.includes(b._mappedName || b.name));
+    const ar = ai === -1 ? 9999 : ai;
+    const br = bi === -1 ? 9999 : bi;
+    return ar - br;
+  });
+
   const sources = fileNames && fileNames.length > 0 ? fileNames : (textLabel ? [textLabel] : []);
   const sourceHtml = sources.length > 0
     ? `<div style="margin-bottom:.875rem;padding:.6rem .875rem;background:var(--bg2);border-radius:var(--radius);border-left:3px solid var(--blue);font-size:12px;color:var(--text2)">
@@ -569,7 +605,6 @@ function renderExtResult(items, fileNames, textLabel) {
   const rows = items.map((item, i) => {
     const isUSD = item.currency === 'USD';
     const note = isUSD ? `${item.amount_orig}×${rate}=${item.amount_twd}` : '';
-    item._mappedName = applyNameMap(item.name, item.raw_name);
     const nameUpper = (item._mappedName || item.name).toUpperCase();
     const noTax = NO_TAX_LIST.some(k => nameUpper.includes(k.toUpperCase()));
     const taxVal = noTax ? 'x' : (item.tax != null && item.tax !== 0) ? item.tax : 'x';
