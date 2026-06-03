@@ -321,6 +321,16 @@ let manualCount = 0;
 // ── API 金鑰 ──
 // 【方式一】直接在下一行填入金鑰（內部使用）
 const HARDCODED_KEY = '';  // 例如 'sk-ant-api03-...'
+const APP_VERSION = '1.0';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
+
+// 自動檢查版本，強制重新載入
+(function checkVersion() {
+  const stored = localStorage.getItem('app_version');
+  if (stored !== APP_VERSION) {
+    localStorage.setItem('app_version', APP_VERSION);
+    if (stored !== null) location.reload(true);
+  }
+})();
 
 // ── 名稱對照表 ──
 // 格式：'帳單原始名稱（部分符合即可）': '顯示名稱'
@@ -329,14 +339,14 @@ const NAME_MAP = {
   'WAVESPEEDAI': 'WaveSpeedAI',
   'FISH.AUDIO': 'Fish Audio',
   'FISH AUDIO': 'Fish Audio',
+  'ELEVEN LABS': 'ElevenLabs',
+  'ELEVENLABS': 'ElevenLabs',
   'ANTHROPIC MAX': 'Claude',
   'ANTHROPIC': 'Claude',
   'VOAI': 'VoAI 聲音創造所',
   'ARCWEAVE': 'Arcweave',
   'OPENAI': 'GPT4',
   'ADOBE': 'Adobe月費',
-  'ELEVENLABS': 'ElevenLabs',
-  'ELEVEN LABS': 'ElevenLabs',
   'GOOGLE ONE': 'Google One',
   'YOUTUBE': 'YouTube',
   'MUREKA': 'Mureka',
