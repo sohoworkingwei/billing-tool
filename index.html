@@ -323,20 +323,32 @@ const HARDCODED_KEY = '';  // 例如 'sk-ant-api03-...'
 // 格式：'帳單原始名稱（部分符合即可）': '顯示名稱'
 // 比對方式：帳單名稱包含左邊的字串（不分大小寫）就替換成右邊
 const NAME_MAP = {
-  'WAVESPEEDAI Technical service fee': 'WaveSpeedAI',
+  'WAVESPEEDAI': 'WaveSpeedAI',
+  'FISH.AUDIO': 'Fish Audio',
+  'FISH AUDIO': 'Fish Audio',
+  'ANTHROPIC MAX': 'Claude',
+  'VOAI': 'VoAI 聲音創造所',
+  'ARCWEAVE': 'Arcweave',
   'OPENAI': 'GPT4',
   'ADOBE': 'Adobe月費',
   'ELEVENLABS': 'ElevenLabs',
   'GOOGLE ONE': 'Google One',
   'YOUTUBE': 'YouTube',
   'MUREKA': 'Mureka',
-  'Fish.audio Plus': 'Fish Audio',
   'DZINE': 'Dzine',
   'Anthropic Max plan':'Claude',
   'VoAI Starter':'VoAI 聲音創造所',
   'Arcweave Workspaces Pro':'Arcweave',
   // 在這裡繼續新增對照...
+
 };
+
+// 這些服務不顯示稅（填 x），關鍵字不分大小寫、部分符合即可
+const NO_TAX_LIST = [
+  'GOOGLE ONE',
+  'YOUTUBE',
+  // 在這裡繼續新增不含稅的服務...
+];
 
 function getApiKey() {
   return HARDCODED_KEY || localStorage.getItem('anthropic_api_key') || '';
@@ -451,12 +463,14 @@ async function runExtract() {
 
   const billText = document.getElementById('ext-textarea').value.trim();
   const sys = `你是帳單萃取助手。從帳單中找出所有費用項目，以 JSON 陣列回傳，每個元素：
-- name: 服務名稱（英文保留，可附月份，如 GPT4(2026/05)）
+- name: 服務名稱（英文保留，可附月份及計費區間，如 GPT4(2026/05) 或 MaxPlan(05/05-06/05)）
 - currency: TWD 或 USD
-- amount_orig: 原始數字（浮點數）
+- amount_orig: 實際付款金額（浮點數）；若帳單有「Amount paid」欄位，以該金額為準，而非 Total 或 Subtotal；若有 Applied balance（餘額抵扣），需計算實際付款金額
 - amount_twd: 台幣金額（整數）；USD × ${rate}，TWD 直接用
 - tax: 稅金（整數，台幣）；若帳單上有稅則填入，否則填 null
 - billing_date: 帳單日期 YYYY.MM.DD，無法確認留空字串
+- card_last4: 帳單上的信用卡末四碼（字串），找不到則填 null
+
 只回傳 JSON 陣列，不含任何其他文字或 markdown。`;
 
   try {
@@ -485,7 +499,7 @@ async function runExtract() {
       resultDiv.innerHTML = `<p class="err-msg">解析回應時發生錯誤，請重試。<br><small>${esc(clean.slice(0, 300))}</small></p>`;
       btn.disabled = false; return;
     }
-    renderExtResult(items);
+    renderExtResult(items, extFiles.map(f => f.name), billText ? '（貼上文字）' : null);
   } catch (e) {
     resultDiv.innerHTML = `<p class="err-msg">錯誤：${esc(e.message)}</p>`;
   }
@@ -500,14 +514,22 @@ function applyNameMap(name) {
   return name;
 }
 
-function renderExtResult(items) {
+function renderExtResult(items, fileNames, textLabel) {
   window._extItems = items;
   const rate = parseFloat(document.getElementById('ext-rate').value) || 31.5;
+  const sources = fileNames && fileNames.length > 0 ? fileNames : (textLabel ? [textLabel] : []);
+  const sourceHtml = sources.length > 0
+    ? `<div style="margin-bottom:.875rem;padding:.6rem .875rem;background:var(--bg2);border-radius:var(--radius);border-left:3px solid var(--blue);font-size:12px;color:var(--text2)">
+        <span style="font-weight:600;color:var(--text)">來源檔案：</span>${sources.map(s => `<span style="margin-left:6px">📄 ${esc(s)}</span>`).join('')}
+       </div>`
+    : '';
   const rows = items.map((item, i) => {
     const isUSD = item.currency === 'USD';
     const note = isUSD ? `${item.amount_orig}×${rate}=${item.amount_twd}` : '';
     item._mappedName = applyNameMap(item.name);
-    const taxVal = (item.tax != null && item.tax !== 0) ? item.tax : 'x';
+    const nameUpper = (item._mappedName || item.name).toUpperCase();
+    const noTax = NO_TAX_LIST.some(k => nameUpper.includes(k.toUpperCase()));
+    const taxVal = noTax ? 'x' : (item.tax != null && item.tax !== 0) ? item.tax : 'x';
     const mapped = item._mappedName !== item.name;
     return `<tr>
       <td>
@@ -516,16 +538,18 @@ function renderExtResult(items) {
       </td>
       <td><input type="number" id="ei-amt-${i}" value="${item.amount_twd}" style="width:90px;font-weight:600"></td>
       <td><input type="text" id="ei-tax-${i}" value="${taxVal}" style="width:55px;text-align:center"></td>
+      <td><input type="text" id="ei-card-${i}" value="${esc(item.card_last4 || '')}" style="width:55px;text-align:center" placeholder="—"></td>
       <td><input type="text" id="ei-note-${i}" value="${esc(note)}" style="font-size:12px"></td>
     </tr>`;
   }).join('');
 
   document.getElementById('ext-result').innerHTML = `
     <div style="margin-top:1.25rem">
+      ${sourceHtml}
       <p style="font-size:13px;font-weight:600;margin-bottom:.875rem">解析出 ${items.length} 筆，可直接修改後匯入或複製。</p>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th style="width:32%">項目</th><th style="width:18%">營業額（TWD）</th><th style="width:10%">稅</th><th style="width:40%">備註</th></tr></thead>
+          <thead><tr><th style="width:28%">項目</th><th style="width:16%">營業額（TWD）</th><th style="width:8%">稅</th><th style="width:10%">卡號末四碼</th><th style="width:38%">備註</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -545,13 +569,14 @@ function getEdited() {
     name: document.getElementById('ei-name-' + i)?.value || item.name,
     amount: parseFloat(document.getElementById('ei-amt-' + i)?.value) || item.amount_twd || 0,
     tax: document.getElementById('ei-tax-' + i)?.value || 'x',
+    card: document.getElementById('ei-card-' + i)?.value || '',
     note: document.getElementById('ei-note-' + i)?.value || '',
     id: Math.random().toString(36).slice(2)
   }));
 }
 function copyTSV() {
   const edited = getEdited();
-  const tsv = '項目\t營業額\t稅\t備註\n' + edited.map(r => `${r.name}\t${r.amount}\t${r.tax}\t${r.note}`).join('\n');
+  const tsv = '項目\t營業額\t稅\t卡號末四碼\t備註\n' + edited.map(r => `${r.name}\t${r.amount}\t${r.tax}\t${r.card}\t${r.note}`).join('\n');
   navigator.clipboard.writeText(tsv).catch(() => {});
   document.getElementById('tsv-output').style.display = 'block';
   document.getElementById('tsv-box').textContent = tsv;
