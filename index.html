@@ -320,8 +320,8 @@ let manualCount = 0;
 
 // ── API 金鑰 ──
 // 【方式一】直接在下一行填入金鑰（內部使用）
-const HARDCODED_KEY = '';  // 例如 'sk-ant-api03-...'
-const APP_VERSION = '1.0';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
+// API 金鑰請在「⚙ 設定」頁面輸入，會儲存在瀏覽器中
+const APP_VERSION = '1.2';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
 
 // 自動檢查版本，強制重新載入
 (function checkVersion() {
@@ -385,7 +385,7 @@ const SORT_ORDER = [
 ];
 
 function getApiKey() {
-  return HARDCODED_KEY || localStorage.getItem('anthropic_api_key') || '';
+  return localStorage.getItem('anthropic_api_key') || '';
 }
 function updateApiStatus() {
   const key = getApiKey();
@@ -656,14 +656,20 @@ function renderExtResult(items, fileNames, textLabel) {
 }
 
 function getEdited() {
-  return (window._extItems || []).map((item, i) => ({
-    name: document.getElementById('ei-name-' + i)?.value || item.name,
-    amount: parseFloat(document.getElementById('ei-amt-' + i)?.value) || item.amount_twd || 0,
-    tax: document.getElementById('ei-tax-' + i)?.value || 'x',
-    card: document.getElementById('ei-card-' + i)?.value || '',
-    note: document.getElementById('ei-note-' + i)?.value || '',
-    id: Math.random().toString(36).slice(2)
-  }));
+  return (window._extItems || []).map((item, i) => {
+    const amt = parseFloat(document.getElementById('ei-amt-' + i)?.value) || item.amount_twd || 0;
+    const taxVal = document.getElementById('ei-tax-' + i)?.value || 'x';
+    const tax = (taxVal && taxVal !== 'x') ? (parseFloat(taxVal) || 0) : 0;
+    return {
+      name: document.getElementById('ei-name-' + i)?.value || item.name,
+      amount: amt,
+      tax: taxVal,
+      total: amt + tax,
+      card: document.getElementById('ei-card-' + i)?.value || '',
+      note: document.getElementById('ei-note-' + i)?.value || '',
+      id: Math.random().toString(36).slice(2)
+    };
+  });
 }
 function copyTSV() {
   const edited = getEdited();
@@ -673,7 +679,8 @@ function copyTSV() {
   document.getElementById('tsv-box').textContent = tsv;
 }
 function transferToReconcile() {
-  parsedPayments = getEdited();
+  const edited = getEdited();
+  parsedPayments = edited.map(r => ({ ...r, amount: r.total }));
   renderParsedPreview();
   document.getElementById('import-notice-text').textContent = `已從帳單解析頁匯入 ${parsedPayments.length} 筆紀錄`;
   document.getElementById('import-notice').style.display = 'flex';
