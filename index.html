@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>帳單對帳工具</title>
+<style>
+  /* ── 全域 ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #ffffff;
+    --bg2: #f7f7f5;
+    --bg3: #f0efe9;
+    --border: rgba(0,0,0,.12);
+    --border2: rgba(0,0,0,.22);
+    --text: #1a1a18;
+    --text2: #6b6b66;
+    --text3: #a0a09a;
+    --blue: #185FA5;
+    --blue-bg: #E6F1FB;
+    --blue-text: #0C447C;
+    --green: #0F6E56;
+    --green-bg: #E1F5EE;
+    --green-text: #085041;
+    --amber-bg: #FAEEDA;
+    --amber-text: #633806;
+    --red: #A32D2D;
+    --red-bg: #FCEBEB;
+    --red-text: #791F1F;
+    --gray-bg: #F1EFE8;
+    --gray-text: #444441;
+    --radius: 8px;
+    --radius-lg: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
+  }
+  body { font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif; background: var(--bg3); color: var(--text); font-size: 14px; line-height: 1.6; min-height: 100vh; }
+
+  /* ── 頂部 ── */
+  .topbar { background: var(--bg); border-bottom: 0.5px solid var(--border); padding: 0 2rem; display: flex; align-items: center; gap: 1.5rem; height: 52px; position: sticky; top: 0; z-index: 100; }
+  .topbar-title { font-size: 15px; font-weight: 600; color: var(--text); }
+  .topbar-sub { font-size: 13px; color: var(--text3); }
+  .api-status { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #ccc; }
+  .dot.ok { background: var(--green); }
+  .dot.err { background: var(--red); }
+
+  /* ── 頁籤 ── */
+  .nav { background: var(--bg); border-bottom: 0.5px solid var(--border); padding: 0 2rem; display: flex; gap: 0; }
+  .nav-tab { padding: 12px 20px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; background: transparent; color: var(--text2); border-bottom: 2px solid transparent; transition: .15s; white-space: nowrap; }
+  .nav-tab:hover { color: var(--text); }
+  .nav-tab.active { color: var(--text); border-bottom-color: var(--text); }
+
+  /* ── 主體 ── */
+  .main { max-width: 860px; margin: 0 auto; padding: 2rem 1.5rem; }
+  .page { display: none; } .page.active { display: block; }
+
+  /* ── 卡片 ── */
+  .card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 1.25rem; }
+  .card-title { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 1rem; }
+
+  /* ── 頁籤切換 ── */
+  .tabs { display: flex; gap: 4px; margin-bottom: .875rem; }
+  .tab { padding: 5px 14px; font-size: 13px; border: 0.5px solid var(--border2); border-radius: var(--radius); cursor: pointer; background: transparent; color: var(--text2); transition: .15s; }
+  .tab.active { background: var(--bg2); color: var(--text); border-color: var(--border2); font-weight: 500; }
+  .tab-pane { display: none; } .tab-pane.active { display: block; }
+
+  /* ── 表單元素 ── */
+  input[type=text], input[type=number], input[type=password], textarea, select {
+    border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg2);
+    color: var(--text); font-size: 13px; font-family: inherit; padding: 7px 10px; outline: none; transition: .15s;
+  }
+  input[type=text]:focus, input[type=number]:focus, input[type=password]:focus, textarea:focus { border-color: var(--blue); background: var(--bg); box-shadow: 0 0 0 3px rgba(24,95,165,.1); }
+  textarea { width: 100%; min-height: 110px; resize: vertical; font-family: 'Menlo', 'Consolas', monospace; line-height: 1.5; }
+
+  /* ── 按鈕 ── */
+  .btn { padding: 7px 18px; border-radius: var(--radius); font-size: 13px; font-weight: 500; cursor: pointer; transition: .15s; border: 0.5px solid var(--border2); background: transparent; color: var(--text); }
+  .btn:hover { background: var(--bg2); }
+  .btn:active { transform: scale(.98); }
+  .btn:disabled { opacity: .35; cursor: not-allowed; transform: none; }
+  .btn-primary { background: var(--blue); border-color: var(--blue); color: #fff; padding: 9px 22px; font-size: 14px; }
+  .btn-primary:hover { background: var(--blue-text); border-color: var(--blue-text); }
+  .btn-primary:disabled { opacity: .35; }
+
+  /* ── 拖曳區 ── */
+  .drop-zone { border: 1.5px dashed var(--border2); border-radius: var(--radius-lg); padding: 2rem; text-align: center; cursor: pointer; transition: .2s; color: var(--text2); user-select: none; }
+  .drop-zone:hover { border-color: var(--blue); background: var(--blue-bg); color: var(--blue-text); }
+  .drop-zone.dragover { border-color: var(--blue); background: var(--blue-bg); }
+  .drop-zone.has-file { border-style: solid; border-color: var(--green); background: var(--green-bg); color: var(--green-text); }
+  .drop-icon { font-size: 28px; margin-bottom: .4rem; display: block; }
+
+  /* ── 匯率列 ── */
+  .rate-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: .875rem; }
+  .rate-row label { font-size: 13px; color: var(--text2); white-space: nowrap; }
+
+  /* ── 統計卡 ── */
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 1.25rem; }
+  .stat { background: var(--bg2); border-radius: var(--radius); padding: .875rem 1rem; }
+  .stat-label { font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+  .stat-value { font-size: 26px; font-weight: 600; }
+
+  /* ── 結果表格 ── */
+  .tbl-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+  th { text-align: left; padding: 9px 12px; font-size: 11px; font-weight: 600; color: var(--text2); border-bottom: 0.5px solid var(--border); text-transform: uppercase; letter-spacing: .04em; background: var(--bg2); }
+  td { padding: 9px 12px; border-bottom: 0.5px solid var(--border); vertical-align: middle; word-break: break-word; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg2); }
+  td input { width: 100%; border: 0.5px solid transparent; background: transparent; font-size: 13px; color: var(--text); padding: 2px 4px; border-radius: 4px; }
+  td input:focus { border-color: var(--border2); background: var(--bg); outline: none; }
+
+  /* ── 標籤 ── */
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: var(--radius); font-size: 11px; font-weight: 600; }
+  .badge-green { background: var(--green-bg); color: var(--green-text); }
+  .badge-amber { background: var(--amber-bg); color: var(--amber-text); }
+  .badge-red   { background: var(--red-bg);   color: var(--red-text); }
+  .badge-gray  { background: var(--gray-bg);  color: var(--gray-text); }
+  .badge-blue  { background: var(--blue-bg);  color: var(--blue-text); }
+
+  /* ── 輔助 ── */
+  .hint { font-size: 12px; color: var(--text3); margin-top: .4rem; line-height: 1.6; }
+  .diff-note { font-size: 11px; color: var(--text2); margin-top: 3px; }
+  .row-actions { display: flex; gap: .75rem; flex-wrap: wrap; margin-top: 1rem; }
+  .transfer-notice { display: flex; align-items: center; gap: 8px; padding: .75rem 1rem; background: var(--green-bg); border-radius: var(--radius); font-size: 13px; color: var(--green-text); margin-bottom: .875rem; }
+  .loading { text-align: center; padding: 2.5rem; color: var(--text2); }
+  .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--text); border-radius: 50%; animation: spin .8s linear infinite; margin-right: 8px; vertical-align: -3px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .output-box { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 1rem; font-family: 'Menlo','Consolas',monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; margin-top: .75rem; }
+  .file-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--bg2); border-radius: var(--radius); font-size: 13px; margin-top: 6px; }
+  .file-item span { flex: 1; }
+  .file-item .size { color: var(--text3); white-space: nowrap; }
+  .section-actions { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
+  .err-msg { color: var(--red); font-size: 13px; padding: 1rem 0; }
+
+  /* ── API 設定區 ── */
+  .api-setup { background: #fffbf0; border: 1px solid #f5d87a; border-radius: var(--radius-lg); padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; display: flex; align-items: flex-start; gap: 1rem; }
+  .api-setup-icon { font-size: 20px; margin-top: 2px; flex-shrink: 0; }
+  .api-setup label { font-size: 13px; font-weight: 600; display: block; margin-bottom: .4rem; }
+  .api-setup .row { display: flex; gap: 8px; align-items: center; }
+  .api-setup input { flex: 1; font-family: 'Menlo','Consolas',monospace; }
+  .api-setup .hint { margin-top: .4rem; }
+  #api-key-display { font-size: 12px; color: var(--text3); margin-top: 4px; font-family: monospace; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <div class="topbar-title">帳單對帳工具</div>
+  </div>
+  <div class="topbar-sub">帳單解析 → 對帳比對</div>
+  <div class="api-status">
+    <div class="dot" id="api-dot"></div>
+    <span id="api-status-text">未設定 API 金鑰</span>
+  </div>
+</div>
+
+<nav class="nav">
+  <button class="nav-tab active" onclick="switchPage('extract')">① 帳單解析</button>
+  <button class="nav-tab" onclick="switchPage('reconcile')">② 對帳比對</button>
+  <button class="nav-tab" onclick="switchPage('settings')">⚙ 設定</button>
+</nav>
+
+<div class="main">
+
+  <!-- ===== 設定頁 ===== -->
+  <div id="page-settings" class="page">
+    <div class="card">
+      <div class="card-title">Anthropic API 金鑰</div>
+      <div class="api-setup">
+        <div class="api-setup-icon">🔑</div>
+        <div style="flex:1">
+          <label for="api-key-input">API Key</label>
+          <div class="row">
+            <input type="password" id="api-key-input" placeholder="sk-ant-api03-..." style="flex:1">
+            <button class="btn btn-primary" onclick="saveApiKey()">儲存</button>
+            <button class="btn" onclick="toggleShowKey()">顯示</button>
+          </div>
+          <div id="api-key-display"></div>
+          <p class="hint">金鑰僅儲存在瀏覽器 localStorage，不會上傳至任何伺服器。<br>
+          取得金鑰：<a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--blue)">console.anthropic.com</a></p>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">預設匯率</div>
+      <div class="rate-row">
+        <label>美金匯率　1 USD =</label>
+        <input type="number" id="default-rate" value="31.5" step="0.1" min="1" style="width:90px">
+        <label>TWD</label>
+        <button class="btn" onclick="saveDefaultRate()" style="margin-left:4px">儲存</button>
+      </div>
+      <p class="hint" style="margin-top:.75rem">儲存後，解析和對帳頁面的匯率預設值會自動套用。</p>
+    </div>
+  </div>
+
+  <!-- ===== 帳單解析頁 ===== -->
+  <div id="page-extract" class="page active">
+    <div class="card">
+      <div class="card-title">上傳信箱帳單</div>
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('ext','upload')">圖片 / PDF</button>
+        <button class="tab" onclick="switchTab('ext','text')">貼上文字</button>
+      </div>
+      <div id="ext-upload" class="tab-pane active">
+        <div class="drop-zone" id="ext-drop"
+          onclick="document.getElementById('ext-file').click()"
+          ondragover="dzOver(event,'ext-drop')"
+          ondragleave="dzLeave('ext-drop')"
+          ondrop="handleExtDrop(event)">
+          <span class="drop-icon">📄</span>
+          點擊或拖曳帳單圖片 / PDF<br>
+          <span style="font-size:12px;opacity:.7;margin-top:.2rem;display:block">支援 JPG、PNG、PDF，可多選</span>
+        </div>
+        <input type="file" id="ext-file" accept="image/*,.pdf" multiple style="display:none" onchange="handleExtFileInput(event)">
+        <div id="ext-files-list"></div>
+      </div>
+      <div id="ext-text" class="tab-pane">
+        <textarea id="ext-textarea" placeholder="將帳單電子郵件或 PDF 文字貼上&#10;&#10;例如：&#10;Your subscription: Adobe Creative Cloud&#10;Amount: $54.99 USD&#10;Billing date: May 2, 2026"></textarea>
+      </div>
+      <div class="rate-row">
+        <label>美金匯率　1 USD =</label>
+        <input type="number" id="ext-rate" value="31.5" step="0.1" min="1" style="width:90px">
+        <label>TWD</label>
+      </div>
+      <p class="hint">美金依匯率自動換算為台幣；台幣直接使用。</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">執行解析</div>
+      <div class="section-actions">
+        <button class="btn btn-primary" id="ext-run-btn" onclick="runExtract()" disabled>✦ AI 解析帳單</button>
+        <span style="font-size:13px;color:var(--text2)" id="ext-hint">請先上傳帳單或貼上文字</span>
+      </div>
+      <div id="ext-result"></div>
+    </div>
+  </div>
+
+  <!-- ===== 對帳比對頁 ===== -->
+  <div id="page-reconcile" class="page">
+
+    <div class="card">
+      <div class="card-title">步驟 1　付款紀錄</div>
+      <div id="import-notice" style="display:none" class="transfer-notice">
+        ✓ <span id="import-notice-text"></span>
+      </div>
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('rec','paste')">貼上資料</button>
+        <button class="tab" onclick="switchTab('rec','manual')">手動新增</button>
+      </div>
+      <div id="rec-paste" class="tab-pane active">
+        <textarea id="rec-paste-area" placeholder="從 Excel 複製貼上（Tab 分隔）&#10;格式：項目名稱 [Tab] 日期 [Tab] 金額（台幣）&#10;&#10;範例：&#10;Adobe月費(04/25-05/24)&#9;2026.05.05&#9;1900&#10;GPT4(2026/05)&#9;2026.05.05&#9;634"></textarea>
+        <div style="margin-top:.75rem"><button class="btn" onclick="parsePaste()">解析資料</button></div>
+      </div>
+      <div id="rec-manual" class="tab-pane">
+        <div id="manual-rows" style="display:flex;flex-direction:column;gap:8px;margin-bottom:.75rem"></div>
+        <button class="btn" onclick="addManualRow()">＋ 新增一列</button>
+      </div>
+      <div id="parsed-preview" style="display:none;margin-top:.875rem">
+        <p style="font-size:13px;font-weight:600;margin-bottom:.5rem" id="parsed-count"></p>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th style="width:42%">項目</th><th style="width:22%">日期</th><th style="width:22%">金額 TWD</th><th style="width:14%"></th></tr></thead>
+            <tbody id="parsed-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">步驟 2　信用卡帳單</div>
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('bill','upload')">圖片 / PDF</button>
+        <button class="tab" onclick="switchTab('bill','text')">貼上文字</button>
+      </div>
+      <div id="bill-upload" class="tab-pane active">
+        <div class="drop-zone" id="bill-drop"
+          onclick="document.getElementById('bill-file').click()"
+          ondragover="dzOver(event,'bill-drop')"
+          ondragleave="dzLeave('bill-drop')"
+          ondrop="handleBillDrop(event)">
+          <span class="drop-icon">💳</span>
+          點擊或拖曳信用卡帳單圖片 / PDF
+        </div>
+        <input type="file" id="bill-file" accept="image/*,.pdf" style="display:none" onchange="handleBillFileInput(event)">
+        <div id="bill-file-info"></div>
+      </div>
+      <div id="bill-text" class="tab-pane">
+        <textarea id="bill-textarea" placeholder="貼上信用卡帳單文字內容..."></textarea>
+      </div>
+      <div class="rate-row">
+        <label>美金匯率　1 USD =</label>
+        <input type="number" id="rec-rate" value="31.5" step="0.1" min="1" style="width:90px">
+        <label>TWD　　容忍誤差</label>
+        <input type="number" id="rec-tol" value="5" step="1" min="0" max="30" style="width:65px">
+        <label>%</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">步驟 3　執行對帳</div>
+      <div class="section-actions">
+        <button class="btn btn-primary" id="rec-run-btn" onclick="runReconcile()" disabled>✦ 開始 AI 對帳</button>
+        <span style="font-size:13px;color:var(--text2)" id="rec-hint">請先完成步驟 1 和步驟 2</span>
+      </div>
+      <div id="rec-result" style="margin-top:1.25rem"></div>
+    </div>
+
+  </div><!-- /page-reconcile -->
+</div><!-- /main -->
+
+<script>
+// ── 狀態 ──
+let extFiles = [];
+let parsedPayments = [];
+let billFileData = null, billFileType = null;
+let manualCount = 0;
+
+// ── API 金鑰 ──
+// 【方式一】直接在下一行填入金鑰（內部使用）
+const HARDCODED_KEY = '';  // 例如 'sk-ant-api03-...'
+
+function getApiKey() {
+  return HARDCODED_KEY || localStorage.getItem('anthropic_api_key') || '';
+}
+function updateApiStatus() {
+  const key = getApiKey();
+  const dot = document.getElementById('api-dot');
+  const txt = document.getElementById('api-status-text');
+  if (key && key.startsWith('sk-')) {
+    dot.className = 'dot ok';
+    txt.textContent = 'API 金鑰已設定';
+  } else {
+    dot.className = 'dot err';
+    txt.textContent = '未設定 API 金鑰';
+  }
+}
+function saveApiKey() {
+  const val = document.getElementById('api-key-input').value.trim();
+  if (!val) return;
+  localStorage.setItem('anthropic_api_key', val);
+  document.getElementById('api-key-display').textContent = val.slice(0,12) + '••••••••';
+  updateApiStatus();
+  alert('API 金鑰已儲存到瀏覽器。');
+}
+function toggleShowKey() {
+  const inp = document.getElementById('api-key-input');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+function saveDefaultRate() {
+  const r = document.getElementById('default-rate').value;
+  localStorage.setItem('default_rate', r);
+  document.getElementById('ext-rate').value = r;
+  document.getElementById('rec-rate').value = r;
+  alert('預設匯率已儲存。');
+}
+
+// ── 頁面切換 ──
+function switchPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach(t => {
+    if (t.getAttribute('onclick') && t.getAttribute('onclick').includes("'" + name + "'"))
+      t.classList.add('active');
+  });
+}
+function switchTab(group, name) {
+  document.querySelectorAll('[id^="' + group + '-"]').forEach(p => {
+    if (p.classList.contains('tab-pane')) p.classList.remove('active');
+  });
+  const t = document.getElementById(group + '-' + name);
+  if (t) t.classList.add('active');
+  document.querySelectorAll('button.tab').forEach(t => {
+    if (t.getAttribute('onclick') && t.getAttribute('onclick').includes("'" + group + "'"))
+      t.classList.toggle('active', t.getAttribute('onclick').includes("'" + name + "'"));
+  });
+}
+
+// ── 拖曳 ──
+function dzOver(e, id) { e.preventDefault(); document.getElementById(id).classList.add('dragover'); }
+function dzLeave(id) { document.getElementById(id).classList.remove('dragover'); }
+
+// ── 帳單解析：檔案處理 ──
+function handleExtDrop(e) {
+  e.preventDefault(); dzLeave('ext-drop');
+  [...e.dataTransfer.files].forEach(processExtFile);
+}
+function handleExtFileInput(e) { [...e.target.files].forEach(processExtFile); }
+function processExtFile(file) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    extFiles.push({ name: file.name, data: ev.target.result.split(',')[1], type: file.type, size: file.size });
+    renderExtFiles(); checkExtReady();
+  };
+  reader.readAsDataURL(file);
+}
+function removeExtFile(i) {
+  extFiles.splice(i, 1); renderExtFiles();
+  if (extFiles.length === 0) {
+    const z = document.getElementById('ext-drop');
+    z.classList.remove('has-file');
+    z.innerHTML = '<span class="drop-icon">📄</span>點擊或拖曳帳單圖片 / PDF<br><span style="font-size:12px;opacity:.7;margin-top:.2rem;display:block">支援 JPG、PNG、PDF，可多選</span>';
+  }
+  checkExtReady();
+}
+function renderExtFiles() {
+  const list = document.getElementById('ext-files-list');
+  list.innerHTML = extFiles.map((f, i) => `
+    <div class="file-item">
+      <span>📄 ${esc(f.name)}</span>
+      <span class="size">${(f.size / 1024).toFixed(0)} KB</span>
+      <button class="btn" style="padding:2px 8px;font-size:12px" onclick="removeExtFile(${i})">移除</button>
+    </div>`).join('');
+  if (extFiles.length > 0) document.getElementById('ext-drop').classList.add('has-file');
+}
+function checkExtReady() {
+  const ok = extFiles.length > 0 || document.getElementById('ext-textarea').value.trim().length > 0;
+  document.getElementById('ext-run-btn').disabled = !ok;
+  document.getElementById('ext-hint').textContent = ok ? '就緒，可以解析' : '請先上傳帳單或貼上文字';
+}
+document.getElementById('ext-textarea').addEventListener('input', checkExtReady);
+
+// ── 帳單解析：呼叫 API ──
+async function runExtract() {
+  const key = getApiKey();
+  if (!key) { alert('請先在「⚙ 設定」頁面填入 API 金鑰。'); switchPage('settings'); return; }
+  const rate = parseFloat(document.getElementById('ext-rate').value) || 31.5;
+  const btn = document.getElementById('ext-run-btn');
+  const resultDiv = document.getElementById('ext-result');
+  btn.disabled = true;
+  resultDiv.innerHTML = '<div class="loading"><span class="spinner"></span>AI 正在解析帳單中…</div>';
+
+  const billText = document.getElementById('ext-textarea').value.trim();
+  const sys = `你是帳單萃取助手。從帳單中找出所有費用項目，以 JSON 陣列回傳，每個元素：
+- name: 服務名稱（英文保留，可附月份，如 GPT4(2026/05)）
+- original_amount: 原始金額字串，如 "$20.00 USD" 或 "NT$1,900"
+- currency: TWD 或 USD
+- amount_orig: 原始數字（浮點數）
+- amount_twd: 台幣金額（整數）；USD × ${rate}，TWD 直接用
+- billing_date: 帳單日期 YYYY.MM.DD，無法確認留空字串
+- note: 方案名稱或備註，無則空字串
+只回傳 JSON 陣列，不含任何其他文字或 markdown。`;
+
+  try {
+    let content = [];
+    for (const f of extFiles) {
+      if (f.type === 'application/pdf')
+        content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: f.data } });
+      else
+        content.push({ type: 'image', source: { type: 'base64', media_type: f.type, data: f.data } });
+    }
+    if (billText) content.push({ type: 'text', text: '帳單文字：\n' + billText });
+    if (content.length === 0) content = [{ type: 'text', text: billText }];
+    content.push({ type: 'text', text: `美金匯率：1 USD = ${rate} TWD` });
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 2000, system: sys, messages: [{ role: 'user', content }] })
+    });
+    if (!resp.ok) { const e = await resp.json(); throw new Error(e.error?.message || resp.statusText); }
+    const data = await resp.json();
+    const raw = data.content.map(b => b.text || '').join('');
+    const clean = raw.replace(/```json|```/g, '').trim();
+    let items;
+    try { items = JSON.parse(clean); } catch(e) {
+      resultDiv.innerHTML = `<p class="err-msg">解析回應時發生錯誤，請重試。<br><small>${esc(clean.slice(0, 300))}</small></p>`;
+      btn.disabled = false; return;
+    }
+    renderExtResult(items);
+  } catch (e) {
+    resultDiv.innerHTML = `<p class="err-msg">錯誤：${esc(e.message)}</p>`;
+  }
+  btn.disabled = false;
+}
+
+function renderExtResult(items) {
+  window._extItems = items;
+  const today = new Date();
+  const dd = `${today.getFullYear()}.${String(today.getMonth()+1).padStart(2,'0')}.${String(today.getDate()).padStart(2,'0')}`;
+  const rows = items.map((item, i) => `
+    <tr>
+      <td><input type="text" id="ei-name-${i}" value="${esc(item.name)}"></td>
+      <td><input type="text" id="ei-date-${i}" value="${esc(item.billing_date || dd)}" style="width:110px"></td>
+      <td>
+        <span style="font-size:11px;color:var(--text2)">${esc(item.original_amount || '')}</span><br>
+        <input type="number" id="ei-amt-${i}" value="${item.amount_twd}" style="width:85px;font-weight:600">
+        <span style="font-size:11px;color:var(--text2)">TWD</span>
+        ${item.currency === 'USD' ? '<span class="badge badge-blue" style="margin-left:4px">USD 已換算</span>' : ''}
+      </td>
+      <td style="font-size:12px;color:var(--text2)">${esc(item.note || '')}</td>
+    </tr>`).join('');
+
+  document.getElementById('ext-result').innerHTML = `
+    <div style="margin-top:1.25rem">
+      <p style="font-size:13px;font-weight:600;margin-bottom:.875rem">解析出 ${items.length} 筆，可直接修改後匯入對帳頁。</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th style="width:28%">服務名稱</th><th style="width:18%">日期</th><th style="width:32%">金額</th><th style="width:22%">備註</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div class="row-actions">
+        <button class="btn btn-primary" onclick="transferToReconcile()">匯入對帳頁面 →</button>
+        <button class="btn" onclick="copyTSV()">複製為試算表格式</button>
+      </div>
+      <div id="tsv-output" style="display:none">
+        <p style="font-size:12px;color:var(--text2);margin:.75rem 0 .25rem">複製完成，可直接貼到 Excel：</p>
+        <div class="output-box" id="tsv-box"></div>
+      </div>
+    </div>`;
+}
+
+function getEdited() {
+  return (window._extItems || []).map((item, i) => ({
+    name: document.getElementById('ei-name-' + i)?.value || item.name,
+    date: document.getElementById('ei-date-' + i)?.value || item.billing_date || '',
+    amount: parseFloat(document.getElementById('ei-amt-' + i)?.value) || item.amount_twd || 0,
+    id: Math.random().toString(36).slice(2)
+  }));
+}
+function copyTSV() {
+  const edited = getEdited();
+  const tsv = '項目\t付款日期\t金額（台幣）\n' + edited.map(r => `${r.name}\t${r.date}\t${r.amount}`).join('\n');
+  navigator.clipboard.writeText(tsv).catch(() => {});
+  document.getElementById('tsv-output').style.display = 'block';
+  document.getElementById('tsv-box').textContent = tsv;
+}
+function transferToReconcile() {
+  parsedPayments = getEdited();
+  renderParsedPreview();
+  document.getElementById('import-notice-text').textContent = `已從帳單解析頁匯入 ${parsedPayments.length} 筆紀錄`;
+  document.getElementById('import-notice').style.display = 'flex';
+  checkRecReady();
+  switchPage('reconcile');
+}
+
+// ── 對帳：付款紀錄 ──
+function parsePaste() {
+  const raw = document.getElementById('rec-paste-area').value.trim();
+  if (!raw) return;
+  parsedPayments = raw.split('\n').filter(l => l.trim()).map(line => {
+    const p = line.split('\t');
+    return { name: (p[0] || '').trim(), date: (p[1] || '').trim(), amount: parseFloat((p[2] || '0').replace(/[,，]/g, '')) || 0, id: Math.random().toString(36).slice(2) };
+  }).filter(p => p.name);
+  renderParsedPreview(); checkRecReady();
+}
+function renderParsedPreview() {
+  const preview = document.getElementById('parsed-preview');
+  if (parsedPayments.length === 0) { preview.style.display = 'none'; return; }
+  preview.style.display = 'block';
+  document.getElementById('parsed-count').textContent = `共 ${parsedPayments.length} 筆付款紀錄`;
+  document.getElementById('parsed-tbody').innerHTML = parsedPayments.map((p, i) => `
+    <tr>
+      <td>${esc(p.name)}</td><td>${esc(p.date) || '—'}</td>
+      <td>NT$ ${p.amount.toLocaleString()}</td>
+      <td><button class="btn" style="padding:2px 8px;font-size:12px" onclick="removePayment(${i})">刪除</button></td>
+    </tr>`).join('');
+}
+function removePayment(i) { parsedPayments.splice(i, 1); renderParsedPreview(); checkRecReady(); }
+
+let mc = 0;
+function addManualRow() {
+  const id = 'mr-' + mc++;
+  const div = document.createElement('div');
+  div.id = id; div.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+  div.innerHTML = `<input type="text" placeholder="服務名稱" style="flex:2;min-width:130px" id="${id}-name">
+    <input type="text" placeholder="2026.05.05" style="width:110px" id="${id}-date">
+    <input type="number" placeholder="金額 TWD" style="width:100px" id="${id}-amt">
+    <button class="btn" style="padding:3px 10px;font-size:12px" onclick="saveManualRow('${id}')">加入</button>`;
+  document.getElementById('manual-rows').appendChild(div);
+}
+function saveManualRow(id) {
+  const name = document.getElementById(id + '-name').value.trim();
+  const date = document.getElementById(id + '-date').value.trim();
+  const amount = parseFloat(document.getElementById(id + '-amt').value) || 0;
+  if (!name) return;
+  parsedPayments.push({ name, date, amount, id: Math.random().toString(36).slice(2) });
+  document.getElementById(id).remove();
+  renderParsedPreview(); checkRecReady();
+}
+
+// ── 對帳：帳單檔案 ──
+function handleBillDrop(e) {
+  e.preventDefault(); dzLeave('bill-drop');
+  const f = e.dataTransfer.files[0]; if (f) processBillFile(f);
+}
+function handleBillFileInput(e) { const f = e.target.files[0]; if (f) processBillFile(f); }
+function processBillFile(file) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    billFileData = ev.target.result.split(',')[1]; billFileType = file.type;
+    const z = document.getElementById('bill-drop');
+    z.classList.add('has-file');
+    z.innerHTML = `<span class="drop-icon">✓</span><strong>${esc(file.name)}</strong>`;
+    document.getElementById('bill-file-info').innerHTML = `<div class="file-item"><span>💳 ${esc(file.name)}</span><span class="size">${(file.size/1024).toFixed(0)} KB</span></div>`;
+    checkRecReady();
+  };
+  reader.readAsDataURL(file);
+}
+function checkRecReady() {
+  const hasPay = parsedPayments.length > 0;
+  const hasBill = billFileData || document.getElementById('bill-textarea').value.trim();
+  document.getElementById('rec-run-btn').disabled = !(hasPay && hasBill);
+  document.getElementById('rec-hint').textContent = !hasPay ? '請先輸入付款紀錄' : !hasBill ? '請上傳信用卡帳單' : '就緒，可以開始對帳！';
+}
+document.getElementById('bill-textarea').addEventListener('input', checkRecReady);
+
+// ── 對帳：呼叫 API ──
+async function runReconcile() {
+  const key = getApiKey();
+  if (!key) { alert('請先在「⚙ 設定」頁面填入 API 金鑰。'); switchPage('settings'); return; }
+  const rate = parseFloat(document.getElementById('rec-rate').value) || 31.5;
+  const tol = parseFloat(document.getElementById('rec-tol').value) || 5;
+  const resultDiv = document.getElementById('rec-result');
+  const btn = document.getElementById('rec-run-btn');
+  btn.disabled = true;
+  resultDiv.innerHTML = '<div class="loading"><span class="spinner"></span>AI 正在比對中…</div>';
+
+  const paySum = parsedPayments.map(p => `- ${p.name}｜${p.date || '未知'}｜NT$ ${p.amount}`).join('\n');
+  const billText = document.getElementById('bill-textarea').value.trim();
+  const sys = `你是財務對帳助手。比對公司付款紀錄（台幣）與信用卡帳單，回傳 JSON 陣列，每個元素：
+- bill_item: 帳單服務名稱
+- bill_amount: 帳單金額（含幣別）
+- status: "matched"（確認已付）| "fuzzy"（可能匹配）| "not_found"（無付款紀錄）
+- matched_payment: 對應付款紀錄名稱（若有）
+- matched_amount_twd: 對應台幣金額（數字，若有）
+- diff_note: 差異說明（選填）
+只回傳 JSON，不含其他文字。`;
+  const prompt = `付款紀錄：\n${paySum}\n\n${billText ? '帳單文字：\n' + billText : '帳單見附件'}\n\n匯率：1 USD = ${rate} TWD，誤差容忍 ±${tol}%`;
+
+  try {
+    let messages;
+    if (billFileData) {
+      const content = billFileType === 'application/pdf'
+        ? [{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: billFileData } }, { type: 'text', text: prompt }]
+        : [{ type: 'image', source: { type: 'base64', media_type: billFileType, data: billFileData } }, { type: 'text', text: prompt }];
+      messages = [{ role: 'user', content }];
+    } else {
+      messages = [{ role: 'user', content: prompt }];
+    }
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 2000, system: sys, messages })
+    });
+    if (!resp.ok) { const e = await resp.json(); throw new Error(e.error?.message || resp.statusText); }
+    const data = await resp.json();
+    const raw = data.content.map(b => b.text || '').join('');
+    const clean = raw.replace(/```json|```/g, '').trim();
+    let items;
+    try { items = JSON.parse(clean); } catch(e) {
+      resultDiv.innerHTML = `<p class="err-msg">解析錯誤，請重試。</p>`; btn.disabled = false; return;
+    }
+    renderRecResult(items);
+  } catch (e) {
+    resultDiv.innerHTML = `<p class="err-msg">錯誤：${esc(e.message)}</p>`;
+  }
+  btn.disabled = false;
+}
+
+function renderRecResult(items) {
+  window._recItems = items;
+  const matched = items.filter(i => i.status === 'matched').length;
+  const fuzzy   = items.filter(i => i.status === 'fuzzy').length;
+  const notFound = items.filter(i => i.status === 'not_found').length;
+  const badge = s => ({
+    matched: '<span class="badge badge-green">✓ 已對到</span>',
+    fuzzy:   '<span class="badge badge-amber">可能匹配</span>',
+    not_found: '<span class="badge badge-red">找不到</span>'
+  })[s] || '<span class="badge badge-gray">—</span>';
+  const rows = items.map(i => `
+    <tr>
+      <td style="font-weight:600">${esc(i.bill_item)}</td>
+      <td>${esc(i.bill_amount || '—')}</td>
+      <td>${badge(i.status)}${i.diff_note ? `<div class="diff-note">${esc(i.diff_note)}</div>` : ''}</td>
+      <td>${esc(i.matched_payment || '—')}${i.matched_amount_twd ? `<div class="diff-note">NT$ ${i.matched_amount_twd}</div>` : ''}</td>
+    </tr>`).join('');
+  document.getElementById('rec-result').innerHTML = `
+    <div class="stats">
+      <div class="stat"><div class="stat-label">已確認</div><div class="stat-value" style="color:var(--green)">${matched}</div></div>
+      <div class="stat"><div class="stat-label">待確認</div><div class="stat-value" style="color:#BA7517">${fuzzy}</div></div>
+      <div class="stat"><div class="stat-label">無付款紀錄</div><div class="stat-value" style="color:var(--red)">${notFound}</div></div>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:26%">帳單項目</th><th style="width:18%">帳單金額</th><th style="width:24%">狀態</th><th style="width:32%">對應付款紀錄</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div class="row-actions">
+      <button class="btn" onclick="exportCSV()">↓ 匯出 CSV</button>
+    </div>`;
+}
+
+function exportCSV() {
+  const items = window._recItems || [];
+  const h = '帳單項目,帳單金額,狀態,對應付款紀錄,付款金額TWD,備註\n';
+  const r = items.map(i => [
+    `"${i.bill_item}"`, `"${i.bill_amount || ''}"`,
+    { matched: '已對到', fuzzy: '可能匹配', not_found: '找不到' }[i.status] || '',
+    `"${i.matched_payment || ''}"`, i.matched_amount_twd || '', `"${i.diff_note || ''}"`
+  ].join(',')).join('\n');
+  const blob = new Blob(['\uFEFF' + h + r], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = '對帳結果.csv'; a.click();
+}
+
+// ── 工具 ──
+function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── 初始化 ──
+(function init() {
+  updateApiStatus();
+  const savedRate = localStorage.getItem('default_rate');
+  if (savedRate) {
+    document.getElementById('ext-rate').value = savedRate;
+    document.getElementById('rec-rate').value = savedRate;
+    document.getElementById('default-rate').value = savedRate;
+  }
+  const savedKey = localStorage.getItem('anthropic_api_key');
+  if (savedKey) document.getElementById('api-key-display').textContent = savedKey.slice(0,12) + '••••••••';
+})();
+</script>
+</body>
+</html>
