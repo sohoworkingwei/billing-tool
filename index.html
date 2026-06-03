@@ -336,11 +336,7 @@ const NAME_MAP = {
   'YOUTUBE': 'YouTube',
   'MUREKA': 'Mureka',
   'DZINE': 'Dzine',
-  'Anthropic Max plan':'Claude',
-  'VoAI Starter':'VoAI 聲音創造所',
-  'Arcweave Workspaces Pro':'Arcweave',
   // 在這裡繼續新增對照...
-
 };
 
 // 這些服務不顯示稅（填 x），關鍵字不分大小寫、部分符合即可
@@ -464,6 +460,7 @@ async function runExtract() {
   const billText = document.getElementById('ext-textarea').value.trim();
   const sys = `你是帳單萃取助手。從帳單中找出所有費用項目，以 JSON 陣列回傳，每個元素：
 - name: 服務名稱（英文保留，可附月份及計費區間，如 GPT4(2026/05) 或 MaxPlan(05/05-06/05)）
+- raw_name: 帳單上的完整原始服務名稱，不做任何縮短或省略
 - currency: TWD 或 USD
 - amount_orig: 實際付款金額（浮點數）；若帳單有「Amount paid」欄位，以該金額為準，而非 Total 或 Subtotal；若有 Applied balance（餘額抵扣），需計算實際付款金額
 - amount_twd: 台幣金額（整數）；USD × ${rate}，TWD 直接用
@@ -474,42 +471,69 @@ async function runExtract() {
 只回傳 JSON 陣列，不含任何其他文字或 markdown。`;
 
   try {
-    let content = [];
-    for (const f of extFiles) {
-      if (f.type === 'application/pdf')
-        content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: f.data } });
-      else
-        content.push({ type: 'image', source: { type: 'base64', media_type: f.type, data: f.data } });
-    }
-    if (billText) content.push({ type: 'text', text: '帳單文字：\n' + billText });
-    if (content.length === 0) content = [{ type: 'text', text: billText }];
-    content.push({ type: 'text', text: `美金匯率：1 USD = ${rate} TWD` });
+    let allItems = [];
+    const filesToProcess = extFiles.length > 0 ? extFiles : null;
 
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 2000, system: sys, messages: [{ role: 'user', content }] })
-    });
-    if (!resp.ok) { const e = await resp.json(); throw new Error(e.error?.message || resp.statusText); }
-    const data = await resp.json();
-    const raw = data.content.map(b => b.text || '').join('');
-    const clean = raw.replace(/```json|```/g, '').trim();
-    let items;
-    try { items = JSON.parse(clean); } catch(e) {
-      resultDiv.innerHTML = `<p class="err-msg">解析回應時發生錯誤，請重試。<br><small>${esc(clean.slice(0, 300))}</small></p>`;
-      btn.disabled = false; return;
+    if (filesToProcess) {
+      // 逐一解析每個檔案
+      for (let fi = 0; fi < filesToProcess.length; fi++) {
+        const f = filesToProcess[fi];
+        resultDiv.innerHTML = `<div class="loading"><span class="spinner"></span>正在解析第 ${fi+1} / ${filesToProcess.length} 個檔案：${esc(f.name)}…</div>`;
+        let content = [];
+        if (f.type === 'application/pdf')
+          content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: f.data } });
+        else
+          content.push({ type: 'image', source: { type: 'base64', media_type: f.type, data: f.data } });
+        content.push({ type: 'text', text: `美金匯率：1 USD = ${rate} TWD` });
+
+        const resp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+          body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 2000, system: sys, messages: [{ role: 'user', content }] })
+        });
+        if (!resp.ok) { const e = await resp.json(); throw new Error(e.error?.message || resp.statusText); }
+        const data = await resp.json();
+        const raw = data.content.map(b => b.text || '').join('');
+        const clean = raw.replace(/```json|```/g, '').trim();
+        let items;
+        try { items = JSON.parse(clean); } catch(e) {
+          resultDiv.innerHTML = `<p class="err-msg">解析「${esc(f.name)}」時發生錯誤，請重試。<br><small>${esc(clean.slice(0,300))}</small></p>`;
+          btn.disabled = false; return;
+        }
+        items.forEach(item => item._sourceFile = f.name);
+        allItems = allItems.concat(items);
+      }
+    } else if (billText) {
+      // 純文字模式
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 2000, system: sys, messages: [{ role: 'user', content: `帳單文字：\n${billText}\n\n美金匯率：1 USD = ${rate} TWD` }] })
+      });
+      if (!resp.ok) { const e = await resp.json(); throw new Error(e.error?.message || resp.statusText); }
+      const data = await resp.json();
+      const raw = data.content.map(b => b.text || '').join('');
+      const clean = raw.replace(/```json|```/g, '').trim();
+      let items;
+      try { items = JSON.parse(clean); } catch(e) {
+        resultDiv.innerHTML = `<p class="err-msg">解析錯誤，請重試。</p>`;
+        btn.disabled = false; return;
+      }
+      items.forEach(item => item._sourceFile = '（貼上文字）');
+      allItems = items;
     }
-    renderExtResult(items, extFiles.map(f => f.name), billText ? '（貼上文字）' : null);
+
+    renderExtResult(allItems, extFiles.map(f => f.name), billText ? '（貼上文字）' : null);
   } catch (e) {
     resultDiv.innerHTML = `<p class="err-msg">錯誤：${esc(e.message)}</p>`;
   }
   btn.disabled = false;
 }
 
-function applyNameMap(name) {
-  const upper = name.toUpperCase();
+function applyNameMap(name, rawName) {
+  const targets = [name, rawName].filter(Boolean).map(s => s.toUpperCase());
   for (const [key, val] of Object.entries(NAME_MAP)) {
-    if (upper.includes(key.toUpperCase())) return val;
+    if (targets.some(t => t.includes(key.toUpperCase()))) return val;
   }
   return name;
 }
@@ -526,7 +550,7 @@ function renderExtResult(items, fileNames, textLabel) {
   const rows = items.map((item, i) => {
     const isUSD = item.currency === 'USD';
     const note = isUSD ? `${item.amount_orig}×${rate}=${item.amount_twd}` : '';
-    item._mappedName = applyNameMap(item.name);
+    item._mappedName = applyNameMap(item.name, item.raw_name);
     const nameUpper = (item._mappedName || item.name).toUpperCase();
     const noTax = NO_TAX_LIST.some(k => nameUpper.includes(k.toUpperCase()));
     const taxVal = noTax ? 'x' : (item.tax != null && item.tax !== 0) ? item.tax : 'x';
@@ -535,6 +559,7 @@ function renderExtResult(items, fileNames, textLabel) {
       <td>
         <input type="text" id="ei-name-${i}" value="${esc(item._mappedName)}">
         ${mapped ? `<div style="font-size:11px;color:var(--text3);margin-top:2px">原始：${esc(item.name)}</div>` : ''}
+        ${item._sourceFile ? `<div style="font-size:11px;color:var(--blue-text);margin-top:2px">📄 ${esc(item._sourceFile)}</div>` : ''}
       </td>
       <td><input type="number" id="ei-amt-${i}" value="${item.amount_twd}" style="width:90px;font-weight:600"></td>
       <td><input type="text" id="ei-tax-${i}" value="${taxVal}" style="width:55px;text-align:center"></td>
