@@ -321,7 +321,7 @@ let manualCount = 0;
 // ── API 金鑰 ──
 // 【方式一】直接在下一行填入金鑰（內部使用）
 // API 金鑰請在「⚙ 設定」頁面輸入，會儲存在瀏覽器中
-const APP_VERSION = '1.2';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
+const APP_VERSION = '1.4';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
 
 // 自動檢查版本，強制重新載入
 (function checkVersion() {
@@ -514,9 +514,13 @@ async function runExtract() {
 - name: 服務／公司名稱。判斷優先順序：(1) 帳單上的寄件公司名稱、From、網址、logo、品牌名稱，(2) Description 欄位。若 Description 只有方案名稱如 Plus / Pro / Starter / Max plan，必須用公司資訊來判斷真正的服務名稱。可附月份及計費區間，如 Fish Audio(05/21-06/21)。若是中華電信帳單，name 必須包含用戶號碼（如 中華電信_0988152488(04/01-04/30)）
 - raw_name: 帳單 Description 欄位或用戶號碼的完整原始文字，不做任何縮短或省略
 - currency: TWD 或 USD
-- amount_orig: 不含稅的營業額（浮點數）。若帳單有明確列出營業稅，請用「應繳總金額 - 營業稅」計算不含稅金額；若無稅則直接用實際付款金額。美金帳單通常無稅直接用 Amount paid
+- amount_orig: 不含稅的營業額（浮點數）。規則如下：
+  (1) 若帳單有明確列出營業稅金額，用「應繳總金額 - 營業稅」計算
+  (2) 若是台灣電子發票格式（有「單價」和「總計」欄位），「單價」是未稅金額，「總計」是含稅金額，amount_orig 填「單價」的數字；但若服務名稱是 YouTube 或 Google One，例外：amount_orig 填「總計」的數字
+  (3) 美金帳單直接用 Amount paid
+  (4) 其他情況用實際付款金額
 - amount_twd: 台幣金額（整數）；USD × ${rate}，TWD 直接用 amount_orig 四捨五入
-- tax: 營業稅金額（整數，台幣）；帳單上有明確列出營業稅則填入，否則填 null
+- tax: 營業稅金額（整數，台幣）。台灣電子發票格式：tax = 總計 - 單價；YouTube 和 Google One 例外填 null；有明列營業稅則填入；其他情況填 null
 - billing_date: 帳單日期 YYYY.MM.DD，無法確認留空字串
 - card_last4: 帳單上的信用卡末四碼（字串），找不到則填 null
 
