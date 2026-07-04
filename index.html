@@ -321,7 +321,7 @@ let manualCount = 0;
 // ── API 金鑰 ──
 // 【方式一】直接在下一行填入金鑰（內部使用）
 // API 金鑰請在「⚙ 設定」頁面輸入，會儲存在瀏覽器中
-const APP_VERSION = '1.4';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
+const APP_VERSION = '1.5';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
 
 // 自動檢查版本，強制重新載入
 (function checkVersion() {
@@ -511,7 +511,7 @@ async function runExtract() {
 
   const billText = document.getElementById('ext-textarea').value.trim();
   const sys = `你是帳單萃取助手。從帳單中找出所有費用項目，以 JSON 陣列回傳，每個元素：
-- name: 服務／公司名稱。判斷優先順序：(1) 帳單上的寄件公司名稱、From、網址、logo、品牌名稱，(2) Description 欄位。若 Description 只有方案名稱如 Plus / Pro / Starter / Max plan，必須用公司資訊來判斷真正的服務名稱。可附月份及計費區間，如 Fish Audio(05/21-06/21)。若是中華電信帳單，name 必須包含用戶號碼（如 中華電信_0988152488(04/01-04/30)）
+- name: 服務／公司名稱。判斷優先順序：(1) 帳單上的寄件公司名稱、From、網址、logo、品牌名稱，(2) Description 欄位。若 Description 只有方案名稱如 Plus / Pro / Starter / Max plan，必須用公司資訊來判斷真正的服務名稱。可附月份及計費區間，如 Fish Audio(05/21-06/21)。若是中華電信帳單，無論帳單內有多少費用項目或小計，**只產生一筆**，name 包含用戶號碼（如 中華電信_0988152488(05/01-05/31)），amount_orig 用「應繳總金額 - 營業稅」，tax 用帳單上明列的營業稅金額
 - raw_name: 帳單 Description 欄位或用戶號碼的完整原始文字，不做任何縮短或省略
 - currency: TWD 或 USD
 - amount_orig: 不含稅的營業額（浮點數）。規則如下：
