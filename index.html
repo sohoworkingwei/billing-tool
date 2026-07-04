@@ -321,7 +321,7 @@ let manualCount = 0;
 // ── API 金鑰 ──
 // 【方式一】直接在下一行填入金鑰（內部使用）
 // API 金鑰請在「⚙ 設定」頁面輸入，會儲存在瀏覽器中
-const APP_VERSION = '1.6';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
+const APP_VERSION = '1.7';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
 
 // 自動檢查版本，強制重新載入
 (function checkVersion() {
@@ -520,7 +520,8 @@ async function runExtract() {
   (2) 若是台灣電子發票格式（有「單價」和「總計」欄位），「單價」是未稅金額，「總計」是含稅金額，amount_orig 填「單價」的數字；但若服務名稱是 YouTube 或 Google One，例外：amount_orig 填「總計」的數字
   (3) 美金帳單直接用 Amount paid
   (4) 其他情況用實際付款金額
-- amount_twd: 台幣金額（整數）；USD × ${rate}，TWD 直接用 amount_orig 四捨五入
+- amount_twd: 台幣金額（整數）。若帳單上有明確標示換算匯率（如 1 USD = 32.8557 TWD 或 Charged NT$328.56），以帳單上的台幣金額為準；否則用 USD × ${rate} 換算，TWD 直接用 amount_orig 四捨五入
+- actual_rate: 帳單上明確標示的換算匯率（浮點數），若有則填入（如 32.8557），若無則填 null
 - tax: 營業稅金額（整數，台幣）。台灣電子發票格式：tax = 總計 - 單價；YouTube 和 Google One 例外填 null；有明列營業稅則填入；其他情況填 null
 - billing_date: 帳單日期 YYYY.MM.DD，無法確認留空字串
 - card_last4: 帳單上的信用卡末四碼（字串），找不到則填 null
@@ -621,7 +622,8 @@ function renderExtResult(items, fileNames, textLabel) {
     : '';
   const rows = items.map((item, i) => {
     const isUSD = item.currency === 'USD';
-    const note = isUSD ? `${item.amount_orig}×${rate}=${item.amount_twd}` : '';
+    const usedRate = item.actual_rate || rate;
+    const note = isUSD ? `${item.amount_orig}×${usedRate}=${item.amount_twd}` : '';
     const nameUpper = (item._mappedName || item.name).toUpperCase();
     const noTax = NO_TAX_LIST.some(k => nameUpper.includes(k.toUpperCase()));
     const taxVal = noTax ? 'x' : (item.tax != null && item.tax !== 0) ? item.tax : 'x';
