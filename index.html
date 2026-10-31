@@ -321,7 +321,7 @@ let manualCount = 0;
 // ── API 金鑰 ──
 // 【方式一】直接在下一行填入金鑰（內部使用）
 // API 金鑰請在「⚙ 設定」頁面輸入，會儲存在瀏覽器中
-const APP_VERSION = '2.1';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
+const APP_VERSION = '2.2';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
 
 // 自動檢查版本，強制重新載入
 (function checkVersion() {
@@ -552,10 +552,12 @@ async function runExtract() {
         if (!resp.ok) { const e = await resp.json(); throw new Error(e.error?.message || resp.statusText); }
         const data = await resp.json();
         const raw = data.content.map(b => b.text || '').join('');
-        const clean = raw.replace(/```json|```/g, '').trim();
+        const stripped1 = raw.replace(/```json\s*/g, '').replace(/```/g, '').trim();
+        const jsonMatch1 = stripped1.match(/\[[\s\S]*\]/);
+        const clean = jsonMatch1 ? jsonMatch1[0] : stripped1;
         let items;
         try { items = JSON.parse(clean); } catch(e) {
-          resultDiv.innerHTML = `<p class="err-msg">解析「${esc(f.name)}」時發生錯誤，請重試。<br><small>${esc(clean.slice(0,300))}</small></p>`;
+          resultDiv.innerHTML = `<p class="err-msg">解析「${esc(f.name)}」時發生錯誤，請重試。<br><small>${esc(raw.slice(0,300))}</small></p>`;
           btn.disabled = false; return;
         }
         items.forEach(item => item._sourceFile = f.name);
@@ -571,7 +573,9 @@ async function runExtract() {
       if (!resp.ok) { const e = await resp.json(); throw new Error(e.error?.message || resp.statusText); }
       const data = await resp.json();
       const raw = data.content.map(b => b.text || '').join('');
-      const clean = raw.replace(/```json|```/g, '').trim();
+      const stripped2 = raw.replace(/```json\s*/g, '').replace(/```/g, '').trim();
+      const jsonMatch2 = stripped2.match(/\[[\s\S]*\]/);
+      const clean = jsonMatch2 ? jsonMatch2[0] : stripped2;
       let items;
       try { items = JSON.parse(clean); } catch(e) {
         resultDiv.innerHTML = `<p class="err-msg">解析錯誤，請重試。</p>`;
