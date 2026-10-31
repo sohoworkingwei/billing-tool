@@ -321,7 +321,7 @@ let manualCount = 0;
 // ── API 金鑰 ──
 // 【方式一】直接在下一行填入金鑰（內部使用）
 // API 金鑰請在「⚙ 設定」頁面輸入，會儲存在瀏覽器中
-const APP_VERSION = '2.0';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
+const APP_VERSION = '2.1';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
 
 // 自動檢查版本，強制重新載入
 (function checkVersion() {
@@ -848,9 +848,10 @@ async function runReconcile() {
     if (!resp.ok) { const e = await resp.json(); throw new Error(e.error?.message || resp.statusText); }
     const data = await resp.json();
     const raw = data.content.map(b => b.text || '').join('');
-    // 嘗試從回傳文字中抓出 JSON 陣列（容忍多餘文字）
-    const jsonMatch = raw.match(/\[[\s\S]*\]/);
-    const clean = jsonMatch ? jsonMatch[0] : raw.replace(/```json|```/g, '').trim();
+    // 先移除 markdown code block 標記，再抓出 JSON 陣列
+    const stripped = raw.replace(/```json\s*/g, '').replace(/```/g, '').trim();
+    const jsonMatch = stripped.match(/\[[\s\S]*\]/);
+    const clean = jsonMatch ? jsonMatch[0] : stripped;
     let items;
     try { items = JSON.parse(clean); } catch(e) {
       resultDiv.innerHTML = `<p class="err-msg">解析錯誤，AI 原始回應：<br><pre style="white-space:pre-wrap;font-size:12px">${esc(raw.slice(0,500))}</pre></p>`;
