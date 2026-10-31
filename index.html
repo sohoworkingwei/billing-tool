@@ -321,7 +321,7 @@ let manualCount = 0;
 // ── API 金鑰 ──
 // 【方式一】直接在下一行填入金鑰（內部使用）
 // API 金鑰請在「⚙ 設定」頁面輸入，會儲存在瀏覽器中
-const APP_VERSION = '2.4';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
+const APP_VERSION = '2.5';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
 
 // 自動檢查版本，強制重新載入
 (function checkVersion() {
@@ -848,7 +848,7 @@ async function runReconcile() {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 4000, system: sys, messages })
+      body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 8000, system: sys, messages })
     });
     if (!resp.ok) { const e = await resp.json(); throw new Error(e.error?.message || resp.statusText); }
     const data = await resp.json();
