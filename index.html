@@ -321,7 +321,7 @@ let manualCount = 0;
 // ── API 金鑰 ──
 // 【方式一】直接在下一行填入金鑰（內部使用）
 // API 金鑰請在「⚙ 設定」頁面輸入，會儲存在瀏覽器中
-const APP_VERSION = '2.3';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
+const APP_VERSION = '2.4';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
 
 // 自動檢查版本，強制重新載入
 (function checkVersion() {
@@ -859,7 +859,11 @@ async function runReconcile() {
     const clean = jsonMatch ? jsonMatch[0] : stripped;
     let items;
     try { items = JSON.parse(clean); } catch(e) {
-      resultDiv.innerHTML = `<p class="err-msg">解析錯誤，AI 原始回應：<br><pre style="white-space:pre-wrap;font-size:12px">${esc(raw.slice(0,500))}</pre></p>`;
+      resultDiv.innerHTML = `<p class="err-msg">解析錯誤<br>
+        <b>raw（清理前）：</b><pre style="white-space:pre-wrap;font-size:11px;background:#f5f5f5;padding:6px">${esc(raw.slice(0,300))}</pre>
+        <b>stripped（清理後）：</b><pre style="white-space:pre-wrap;font-size:11px;background:#f5f5f5;padding:6px">${esc(stripped.slice(0,300))}</pre>
+        <b>clean（抓取後）：</b><pre style="white-space:pre-wrap;font-size:11px;background:#f5f5f5;padding:6px">${esc(clean.slice(0,300))}</pre>
+      </p>`;
       btn.disabled = false; return;
     }
     renderRecResult(items);
