@@ -282,9 +282,9 @@
           ondragleave="dzLeave('bill-drop')"
           ondrop="handleBillDrop(event)">
           <span class="drop-icon">💳</span>
-          點擊或拖曳信用卡帳單圖片 / PDF
+          點擊或拖曳信用卡帳單圖片 / PDF（可多張）
         </div>
-        <input type="file" id="bill-file" accept="image/*,.pdf" style="display:none" onchange="handleBillFileInput(event)">
+        <input type="file" id="bill-file" accept="image/*,.pdf" multiple style="display:none" onchange="handleBillFileInput(event)">
         <div id="bill-file-info"></div>
       </div>
       <div id="bill-text" class="tab-pane">
@@ -315,13 +315,13 @@
 // ── 狀態 ──
 let extFiles = [];
 let parsedPayments = [];
-let billFileData = null, billFileType = null;
+let billFiles = []; // array of {name, data, type, size}
 let manualCount = 0;
 
 // ── API 金鑰 ──
 // 【方式一】直接在下一行填入金鑰（內部使用）
 // API 金鑰請在「⚙ 設定」頁面輸入，會儲存在瀏覽器中
-const APP_VERSION = '1.7';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
+const APP_VERSION = '1.8';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
 
 // 自動檢查版本，強制重新載入
 (function checkVersion() {
@@ -743,24 +743,46 @@ function saveManualRow(id) {
 // ── 對帳：帳單檔案 ──
 function handleBillDrop(e) {
   e.preventDefault(); dzLeave('bill-drop');
-  const f = e.dataTransfer.files[0]; if (f) processBillFile(f);
+  const files = Array.from(e.dataTransfer.files);
+  files.forEach(f => addBillFile(f));
 }
-function handleBillFileInput(e) { const f = e.target.files[0]; if (f) processBillFile(f); }
-function processBillFile(file) {
+function handleBillFileInput(e) {
+  Array.from(e.target.files).forEach(f => addBillFile(f));
+  e.target.value = '';
+}
+function addBillFile(file) {
+  if (billFiles.find(f => f.name === file.name)) {
+    showToast(`⚠ 已有相同檔名：${file.name}`, '#f59e0b'); return;
+  }
   const reader = new FileReader();
   reader.onload = ev => {
-    billFileData = ev.target.result.split(',')[1]; billFileType = file.type;
-    const z = document.getElementById('bill-drop');
-    z.classList.add('has-file');
-    z.innerHTML = `<span class="drop-icon">✓</span><strong>${esc(file.name)}</strong>`;
-    document.getElementById('bill-file-info').innerHTML = `<div class="file-item"><span>💳 ${esc(file.name)}</span><span class="size">${(file.size/1024).toFixed(0)} KB</span></div>`;
+    billFiles.push({ name: file.name, data: ev.target.result.split(',')[1], type: file.type, size: file.size });
+    renderBillFileList();
     checkRecReady();
   };
   reader.readAsDataURL(file);
 }
+function removeBillFile(idx) {
+  billFiles.splice(idx, 1);
+  renderBillFileList();
+  checkRecReady();
+}
+function renderBillFileList() {
+  const z = document.getElementById('bill-drop');
+  if (billFiles.length > 0) {
+    z.classList.add('has-file');
+    z.innerHTML = `<span class="drop-icon">✓</span><strong>${billFiles.length} 張帳單已上傳</strong><br><small style="color:var(--text2)">點擊可繼續新增</small>`;
+  } else {
+    z.classList.remove('has-file');
+    z.innerHTML = `<span class="drop-icon">💳</span>點擊或拖曳信用卡帳單圖片 / PDF（可多張）`;
+  }
+  document.getElementById('bill-file-info').innerHTML = billFiles.map((f, i) =>
+    `<div class="file-item"><span>💳 ${esc(f.name)}</span><span class="size">${(f.size/1024).toFixed(0)} KB <button onclick="removeBillFile(${i})" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px;padding:0 2px;line-height:1" title="移除">✕</button></span></div>`
+  ).join('');
+}
 function checkRecReady() {
   const hasPay = parsedPayments.length > 0;
-  const hasBill = billFileData || document.getElementById('bill-textarea').value.trim();
+  const hasBill = billFiles.length > 0 || document.getElementById('bill-textarea').value.trim();
   document.getElementById('rec-run-btn').disabled = !(hasPay && hasBill);
   document.getElementById('rec-hint').textContent = !hasPay ? '請先輸入付款紀錄' : !hasBill ? '請上傳信用卡帳單' : '就緒，可以開始對帳！';
 }
@@ -791,10 +813,16 @@ async function runReconcile() {
 
   try {
     let messages;
-    if (billFileData) {
-      const content = billFileType === 'application/pdf'
-        ? [{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: billFileData } }, { type: 'text', text: prompt }]
-        : [{ type: 'image', source: { type: 'base64', media_type: billFileType, data: billFileData } }, { type: 'text', text: prompt }];
+    if (billFiles.length > 0) {
+      const content = [];
+      for (const f of billFiles) {
+        if (f.type === 'application/pdf') {
+          content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: f.data } });
+        } else {
+          content.push({ type: 'image', source: { type: 'base64', media_type: f.type, data: f.data } });
+        }
+      }
+      content.push({ type: 'text', text: prompt });
       messages = [{ role: 'user', content }];
     } else {
       messages = [{ role: 'user', content: prompt }];
