@@ -321,7 +321,7 @@ let manualCount = 0;
 // ── API 金鑰 ──
 // 【方式一】直接在下一行填入金鑰（內部使用）
 // API 金鑰請在「⚙ 設定」頁面輸入，會儲存在瀏覽器中
-const APP_VERSION = '2.2';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
+const APP_VERSION = '2.3';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
 
 // 自動檢查版本，強制重新載入
 (function checkVersion() {
@@ -819,8 +819,9 @@ async function runReconcile() {
   const paySum = parsedPayments.map(p => `- ${p.name}｜${p.date || '未知'}｜NT$ ${p.amount}`).join('\n');
   const billText = document.getElementById('bill-textarea').value.trim();
   const sys = `你是財務對帳助手。比對公司付款紀錄（台幣）與信用卡帳單，回傳 JSON 陣列，每個元素：
-- bill_item: 帳單服務名稱
-- bill_amount: 帳單金額（含幣別）
+- bill_item: 帳單服務名稱（信用卡帳單上的原始名稱）
+- bill_date: 帳單上的交易日期，格式 MM/DD 或 YYYY/MM/DD（若有）
+- bill_amount: 帳單金額（含幣別，如 TWD 890 或 USD 10.00）
 - status: "matched"（確認已付）| "fuzzy"（可能匹配）| "not_found"（無付款紀錄）
 - matched_payment: 對應付款紀錄名稱（若有）
 - matched_amount_twd: 對應台幣金額（數字，若有）
@@ -869,31 +870,59 @@ async function runReconcile() {
 }
 
 function renderRecResult(items) {
-  window._recItems = items;
-  const matched = items.filter(i => i.status === 'matched').length;
-  const fuzzy   = items.filter(i => i.status === 'fuzzy').length;
-  const notFound = items.filter(i => i.status === 'not_found').length;
-  const badge = s => ({
-    matched: '<span class="badge badge-green">✓ 已對到</span>',
-    fuzzy:   '<span class="badge badge-amber">可能匹配</span>',
-    not_found: '<span class="badge badge-red">找不到</span>'
-  })[s] || '<span class="badge badge-gray">—</span>';
-  const rows = items.map(i => `
-    <tr>
-      <td style="font-weight:600">${esc(i.bill_item)}</td>
-      <td>${esc(i.bill_amount || '—')}</td>
-      <td>${badge(i.status)}${i.diff_note ? `<div class="diff-note">${esc(i.diff_note)}</div>` : ''}</td>
-      <td>${esc(i.matched_payment || '—')}${i.matched_amount_twd ? `<div class="diff-note">NT$ ${i.matched_amount_twd}</div>` : ''}</td>
-    </tr>`).join('');
+  window._recItems = items.map((item, i) => ({ ...item, _idx: i, _confirmed: item.status === 'matched' }));
+  renderRecTable();
+}
+
+function renderRecTable() {
+  const items = window._recItems;
+  const confirmed = items.filter(i => i._confirmed).length;
+  const fuzzy     = items.filter(i => !i._confirmed && i.status === 'fuzzy').length;
+  const notFound  = items.filter(i => !i._confirmed && i.status === 'not_found').length;
+
+  const badge = item => {
+    if (item._confirmed) return '<span class="badge badge-green">✓ 已確認</span>';
+    if (item.status === 'fuzzy')     return '<span class="badge badge-amber">可能匹配</span>';
+    if (item.status === 'not_found') return '<span class="badge badge-red">找不到</span>';
+    return '<span class="badge badge-gray">—</span>';
+  };
+
+  const rows = items.map(item => {
+    const i = item._idx;
+    const confirmBtn = !item._confirmed
+      ? `<button class="btn" style="padding:2px 10px;font-size:12px;margin-top:4px" onclick="confirmMatch(${i})">✓ 確認匹配</button>`
+      : `<button class="btn" style="padding:2px 10px;font-size:12px;margin-top:4px;opacity:.6" onclick="unconfirmMatch(${i})">取消確認</button>`;
+    const manualMatch = !item._confirmed
+      ? `<div style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <input type="text" id="manual-match-${i}" placeholder="手動填入付款項目名稱" style="font-size:12px;flex:1;min-width:140px">
+          <button class="btn" style="padding:2px 10px;font-size:12px" onclick="applyManualMatch(${i})">套用</button>
+        </div>`
+      : '';
+    return `<tr style="${item._confirmed ? 'opacity:.7' : ''}">
+      <td style="font-weight:600">
+        ${esc(item.bill_item)}
+        ${item.bill_date ? `<div style="font-size:11px;color:var(--text3);margin-top:2px">📅 ${esc(item.bill_date)}</div>` : ''}
+      </td>
+      <td>${esc(item.bill_amount || '—')}</td>
+      <td>
+        ${badge(item)}
+        ${item.diff_note && !item._confirmed ? `<div class="diff-note">${esc(item.diff_note)}</div>` : ''}
+        ${confirmBtn}
+        ${manualMatch}
+      </td>
+      <td>${esc(item.matched_payment || '—')}${item.matched_amount_twd ? `<div class="diff-note">NT$ ${item.matched_amount_twd}</div>` : ''}</td>
+    </tr>`;
+  }).join('');
+
   document.getElementById('rec-result').innerHTML = `
     <div class="stats">
-      <div class="stat"><div class="stat-label">已確認</div><div class="stat-value" style="color:var(--green)">${matched}</div></div>
+      <div class="stat"><div class="stat-label">已確認</div><div class="stat-value" style="color:var(--green)">${confirmed}</div></div>
       <div class="stat"><div class="stat-label">待確認</div><div class="stat-value" style="color:#BA7517">${fuzzy}</div></div>
       <div class="stat"><div class="stat-label">無付款紀錄</div><div class="stat-value" style="color:var(--red)">${notFound}</div></div>
     </div>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th style="width:26%">帳單項目</th><th style="width:18%">帳單金額</th><th style="width:24%">狀態</th><th style="width:32%">對應付款紀錄</th></tr></thead>
+        <thead><tr><th style="width:26%">帳單項目</th><th style="width:16%">帳單金額</th><th style="width:30%">狀態</th><th style="width:28%">對應付款紀錄</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>
@@ -902,12 +931,30 @@ function renderRecResult(items) {
     </div>`;
 }
 
+function confirmMatch(i) {
+  window._recItems[i]._confirmed = true;
+  renderRecTable();
+}
+function unconfirmMatch(i) {
+  window._recItems[i]._confirmed = false;
+  renderRecTable();
+}
+function applyManualMatch(i) {
+  const val = document.getElementById('manual-match-' + i)?.value.trim();
+  if (!val) return;
+  window._recItems[i].matched_payment = val;
+  window._recItems[i].status = 'fuzzy';
+  window._recItems[i]._confirmed = true;
+  window._recItems[i].diff_note = '手動確認匹配';
+  renderRecTable();
+}
+
 function exportCSV() {
   const items = window._recItems || [];
-  const h = '帳單項目,帳單金額,狀態,對應付款紀錄,付款金額TWD,備註\n';
+  const h = '帳單項目,交易日期,帳單金額,狀態,對應付款紀錄,付款金額TWD,備註\n';
   const r = items.map(i => [
-    `"${i.bill_item}"`, `"${i.bill_amount || ''}"`,
-    { matched: '已對到', fuzzy: '可能匹配', not_found: '找不到' }[i.status] || '',
+    `"${i.bill_item}"`, `"${i.bill_date || ''}"`, `"${i.bill_amount || ''}"`,
+    i._confirmed ? '已確認' : ({ fuzzy: '可能匹配', not_found: '找不到' }[i.status] || '已對到'),
     `"${i.matched_payment || ''}"`, i.matched_amount_twd || '', `"${i.diff_note || ''}"`
   ].join(',')).join('\n');
   const blob = new Blob(['\uFEFF' + h + r], { type: 'text/csv;charset=utf-8' });
