@@ -321,7 +321,7 @@ let manualCount = 0;
 // ── API 金鑰 ──
 // 【方式一】直接在下一行填入金鑰（內部使用）
 // API 金鑰請在「⚙ 設定」頁面輸入，會儲存在瀏覽器中
-const APP_VERSION = '1.8';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
+const APP_VERSION = '2.0';  // 每次更新檔案時改這個數字，瀏覽器會自動抓新版
 
 // 自動檢查版本，強制重新載入
 (function checkVersion() {
@@ -596,8 +596,20 @@ function applyNameMap(name, rawName) {
   return name;
 }
 
+function saveExtResult(items, fileNames, textLabel) {
+  try {
+    localStorage.setItem('last_ext_result', JSON.stringify({ items, fileNames, textLabel, savedAt: new Date().toLocaleString('zh-TW') }));
+  } catch(e) {}
+}
+function clearExtResult() {
+  window._extItems = [];
+  document.getElementById('ext-result').innerHTML = '';
+  try { localStorage.removeItem('last_ext_result'); } catch(e) {}
+}
+
 function renderExtResult(items, fileNames, textLabel) {
   window._extItems = items;
+  saveExtResult(items, fileNames, textLabel);
   const rate = parseFloat(document.getElementById('ext-rate').value) || 31.5;
 
   // 先套用名稱對照，再排序
@@ -654,6 +666,7 @@ function renderExtResult(items, fileNames, textLabel) {
       <div class="row-actions">
         <button class="btn btn-primary" onclick="transferToReconcile()">匯入對帳頁面 →</button>
         <button class="btn" onclick="copyTSV()">複製為試算表格式</button>
+        <button class="btn" style="color:var(--text3)" onclick="clearExtResult()">清空結果</button>
       </div>
       <div id="tsv-output" style="display:none">
         <p style="font-size:12px;color:var(--text2);margin:.75rem 0 .25rem">複製完成，可直接貼到 Excel：</p>
@@ -808,7 +821,7 @@ async function runReconcile() {
 - matched_payment: 對應付款紀錄名稱（若有）
 - matched_amount_twd: 對應台幣金額（數字，若有）
 - diff_note: 差異說明（選填）
-只回傳 JSON，不含其他文字。`;
+重要：只回傳純 JSON 陣列，以 [ 開頭、以 ] 結尾，不含任何說明文字、markdown 或 code block。`;
   const prompt = `付款紀錄：\n${paySum}\n\n${billText ? '帳單文字：\n' + billText : '帳單見附件'}\n\n匯率：1 USD = ${rate} TWD，誤差容忍 ±${tol}%`;
 
   try {
@@ -830,15 +843,18 @@ async function runReconcile() {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 2000, system: sys, messages })
+      body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 4000, system: sys, messages })
     });
     if (!resp.ok) { const e = await resp.json(); throw new Error(e.error?.message || resp.statusText); }
     const data = await resp.json();
     const raw = data.content.map(b => b.text || '').join('');
-    const clean = raw.replace(/```json|```/g, '').trim();
+    // 嘗試從回傳文字中抓出 JSON 陣列（容忍多餘文字）
+    const jsonMatch = raw.match(/\[[\s\S]*\]/);
+    const clean = jsonMatch ? jsonMatch[0] : raw.replace(/```json|```/g, '').trim();
     let items;
     try { items = JSON.parse(clean); } catch(e) {
-      resultDiv.innerHTML = `<p class="err-msg">解析錯誤，請重試。</p>`; btn.disabled = false; return;
+      resultDiv.innerHTML = `<p class="err-msg">解析錯誤，AI 原始回應：<br><pre style="white-space:pre-wrap;font-size:12px">${esc(raw.slice(0,500))}</pre></p>`;
+      btn.disabled = false; return;
     }
     renderRecResult(items);
   } catch (e) {
@@ -907,6 +923,23 @@ function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt
   }
   const savedKey = localStorage.getItem('anthropic_api_key');
   if (savedKey) document.getElementById('api-key-display').textContent = savedKey.slice(0,12) + '••••••••';
+
+  // 還原上次解析結果
+  try {
+    const saved = localStorage.getItem('last_ext_result');
+    if (saved) {
+      const { items, fileNames, textLabel, savedAt } = JSON.parse(saved);
+      if (items && items.length > 0) {
+        renderExtResult(items, fileNames, textLabel);
+        // 在結果頂部加上「上次儲存」提示
+        const resultDiv = document.getElementById('ext-result');
+        const notice = document.createElement('div');
+        notice.style.cssText = 'font-size:12px;color:var(--text3);margin-bottom:.5rem;padding:.4rem .75rem;background:var(--bg2);border-radius:6px';
+        notice.textContent = `↩ 已還原上次解析結果（${savedAt}）`;
+        resultDiv.firstElementChild?.prepend(notice);
+      }
+    }
+  } catch(e) {}
 })();
 </script>
 </body>
